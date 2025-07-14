@@ -1,0 +1,13 @@
+AWSConfig:
+S3:
+  bucketName: "s-download-bucket"
+  region: "ap-southeast-1"
+  accessKeyId: <accessKeyId>
+  secretAccess: <secretAccess
+
+Drive:
+  client_id: "<client_id>.apps.googleusercontent.com"
+  client_secret: "<client_secret>"
+  refresh_token: "<refresh_token>"
+  folder_id: <folder_id>
+  maxConcurrent: 10
