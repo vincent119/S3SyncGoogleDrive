@@ -18,7 +18,7 @@
 
 ## 安裝與設定
 
-### 1. 克隆專案
+### 1. 複製專案
 
 ```bash
 git clone https://github.com/vincent119/S3SyncGoogleDrive.git
