@@ -3,50 +3,58 @@ package s3
 import (
 	"context"
 	"log"
-	"sync"
 	"time"
 
 	"S3SyncGoogleDrive/internal/awsSDK"
 	"S3SyncGoogleDrive/internal/configs"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
+	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
 	"github.com/aws/aws-sdk-go-v2/service/s3"
 	"github.com/aws/aws-sdk-go-v2/service/s3/types"
 )
 
-var (
-	s3Client *s3.Client
-	once     sync.Once
-)
-
-// InitS3Client initializes the global S3 client (singleton)
-func InitS3Client() {
-	once.Do(func() {
-		cfg := awsSDK.AwsConnectWithRegion(configs.Config.S3.Region)
-		s3Client = s3.NewFromConfig(cfg)
-		log.Println("S3 client initialized successfully")
-	})
+// S3API defines the interface for S3 client operations
+type S3API interface {
+	ListObjectsV2(ctx context.Context, params *s3.ListObjectsV2Input, optFns ...func(*s3.Options)) (*s3.ListObjectsV2Output, error)
 }
 
-// GetS3Client returns the global S3 client
-func GetS3Client() *s3.Client {
-	if s3Client == nil {
-		log.Println("S3 client is not initialized, initializing now...")
-		InitS3Client()
+// PresignAPI defines the interface for S3 presigner operations
+type PresignAPI interface {
+	PresignGetObject(ctx context.Context, params *s3.GetObjectInput, optFns ...func(*s3.PresignOptions)) (*v4.PresignedHTTPRequest, error)
+}
+
+// S3Manager handles S3 operations
+type S3Manager struct {
+	Client        S3API
+	PresignClient PresignAPI
+}
+
+// NewS3Manager creates a new S3Manager
+func NewS3Manager(client S3API, presignClient PresignAPI) *S3Manager {
+	return &S3Manager{
+		Client:        client,
+		PresignClient: presignClient,
 	}
-	return s3Client
+}
+
+// NewDefaultManager creates an S3Manager with default AWS config
+func NewDefaultManager() *S3Manager {
+	cfg := awsSDK.AwsConnectWithRegion(configs.Config.S3.Region)
+	client := s3.NewFromConfig(cfg)
+	presignClient := s3.NewPresignClient(client)
+	log.Println("S3 client initialized successfully")
+	return NewS3Manager(client, presignClient)
 }
 
 // ListS3Objects lists all objects under the specified prefix
-func ListS3Objects(bucket string, prefix string) ([]types.Object, error) {
-	client := GetS3Client()
-
+func (m *S3Manager) ListS3Objects(bucket string, prefix string) ([]types.Object, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucket),
 		Prefix: aws.String(prefix),
 	}
 
-	resp, err := client.ListObjectsV2(context.TODO(), input)
+	resp, err := m.Client.ListObjectsV2(context.TODO(), input)
 	if err != nil {
 		log.Printf("Failed to list objects in bucket %s with prefix %s: %v", bucket, prefix, err)
 		return nil, err
@@ -57,15 +65,13 @@ func ListS3Objects(bucket string, prefix string) ([]types.Object, error) {
 }
 
 // ListS3Folders lists all top-level folders in the specified S3 bucket
-func ListS3Folders(bucket string) ([]string, error) {
-	client := GetS3Client()
-
+func (m *S3Manager) ListS3Folders(bucket string) ([]string, error) {
 	input := &s3.ListObjectsV2Input{
 		Bucket:    aws.String(bucket),
 		Delimiter: aws.String("/"),
 	}
 
-	resp, err := client.ListObjectsV2(context.TODO(), input)
+	resp, err := m.Client.ListObjectsV2(context.TODO(), input)
 	if err != nil {
 		log.Printf("Failed to list folders in bucket %s: %v", bucket, err)
 		return nil, err
@@ -80,13 +86,8 @@ func ListS3Folders(bucket string) ([]string, error) {
 }
 
 // GetPresignedURL generates a presigned URL for an S3 object (valid for 15 mins by default)
-func GetPresignedURL(bucket, key string) (string, error) {
-	client := GetS3Client()
-
-	// 直接用 s3.NewPresignClient
-	presignClient := s3.NewPresignClient(client)
-
-	req, err := presignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{
+func (m *S3Manager) GetPresignedURL(bucket, key string) (string, error) {
+	req, err := m.PresignClient.PresignGetObject(context.TODO(), &s3.GetObjectInput{
 		Bucket: aws.String(bucket),
 		Key:    aws.String(key),
 	}, s3.WithPresignExpires(15*time.Minute))
@@ -96,6 +97,6 @@ func GetPresignedURL(bucket, key string) (string, error) {
 		return "", err
 	}
 
-	// log.Printf("Presigned URL generated for %s (15 min valid)", key)
 	return req.URL, nil
 }
+

@@ -2,16 +2,35 @@ package awsSDK
 
 import (
 	"context"
-	"github.com/aws/aws-sdk-go-v2/aws"
-	"github.com/aws/aws-sdk-go-v2/config"
 	"log"
 	"os"
+
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
 )
 
-// AwsConnect loads the AWS configuration using the environment variable AWS_PROFILE
-func AwsConnect() aws.Config {
+// ConfigLoader defines a function type for loading AWS config
+type ConfigLoader func(ctx context.Context, optFns ...func(*config.LoadOptions) error) (aws.Config, error)
+
+// AWSManager handles AWS authentication
+type AWSManager struct {
+	Loader ConfigLoader
+}
+
+// NewAWSManager creates a new AWSManager
+func NewAWSManager(loader ConfigLoader) *AWSManager {
+	return &AWSManager{Loader: loader}
+}
+
+// NewDefaultAWSManager creates an AWSManager using the real config loader
+func NewDefaultAWSManager() *AWSManager {
+	return NewAWSManager(config.LoadDefaultConfig)
+}
+
+// Connect loads configuration using AWS_PROFILE
+func (m *AWSManager) Connect() aws.Config {
 	awsProfile := os.Getenv("AWS_PROFILE")
-	cfg, err := config.LoadDefaultConfig(
+	cfg, err := m.Loader(
 		context.Background(),
 		config.WithSharedConfigProfile(awsProfile),
 	)
@@ -21,9 +40,9 @@ func AwsConnect() aws.Config {
 	return cfg
 }
 
-// AwsConnectWithRegion loads the AWS configuration with a specified region
-func AwsConnectWithRegion(region string) aws.Config {
-	cfg, err := config.LoadDefaultConfig(context.TODO(),
+// ConnectWithRegion loads configuration with a specific region
+func (m *AWSManager) ConnectWithRegion(region string) aws.Config {
+	cfg, err := m.Loader(context.TODO(),
 		config.WithRegion(region),
 	)
 	if err != nil {
@@ -31,3 +50,13 @@ func AwsConnectWithRegion(region string) aws.Config {
 	}
 	return cfg
 }
+
+// Wrappers for backward compatibility
+func AwsConnect() aws.Config {
+	return NewDefaultAWSManager().Connect()
+}
+
+func AwsConnectWithRegion(region string) aws.Config {
+	return NewDefaultAWSManager().ConnectWithRegion(region)
+}
+

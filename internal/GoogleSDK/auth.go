@@ -14,7 +14,39 @@ import (
 	"google.golang.org/api/option"
 )
 
-func GoogleConnect() {
+// FileIO interface for file operations
+type FileIO interface {
+	ReadFile(name string) ([]byte, error)
+	WriteFile(name string, data []byte, perm os.FileMode) error
+}
+
+// RealFileIO implements FileIO using os package
+type RealFileIO struct{}
+
+func (r *RealFileIO) ReadFile(name string) ([]byte, error) {
+	return os.ReadFile(name)
+}
+
+func (r *RealFileIO) WriteFile(name string, data []byte, perm os.FileMode) error {
+	return os.WriteFile(name, data, perm)
+}
+
+// AuthManager handles Google authentication
+type AuthManager struct {
+	fs FileIO
+}
+
+// NewAuthManager creates a new AuthManager
+func NewAuthManager(fs FileIO) *AuthManager {
+	return &AuthManager{fs: fs}
+}
+
+// NewDefaultAuthManager creates an AuthManager with RealFileIO
+func NewDefaultAuthManager() *AuthManager {
+	return NewAuthManager(&RealFileIO{})
+}
+
+func (a *AuthManager) GoogleConnect() {
 	ctx := context.Background()
 
 	conf := &oauth2.Config{
@@ -41,11 +73,11 @@ func GoogleConnect() {
 	fmt.Println("Access Token:", token.AccessToken)
 	fmt.Println("Refresh Token (save this):", token.RefreshToken)
 
-	saveRefreshToken(token.RefreshToken)
+	a.saveRefreshToken(token.RefreshToken)
 }
 
-func saveRefreshToken(refreshToken string) {
-	err := os.WriteFile("config/refresh_token.txt", []byte(refreshToken), 0644)
+func (a *AuthManager) saveRefreshToken(refreshToken string) {
+	err := a.fs.WriteFile("config/refresh_token.txt", []byte(refreshToken), 0644)
 	if err != nil {
 		log.Println("Failed to save refresh token:", err)
 	} else {
@@ -53,11 +85,11 @@ func saveRefreshToken(refreshToken string) {
 	}
 }
 
-func GetAccessTokenFromRefresh() string {
+func (a *AuthManager) GetAccessTokenFromRefresh() string {
 	ctx := context.Background()
 
 	// 讀取 refresh_token
-	refreshTokenBytes, err := os.ReadFile("config/fresh_token.txt")
+	refreshTokenBytes, err := a.fs.ReadFile("config/refresh_token.txt")
 	if err != nil {
 		log.Fatalf("Failed to read refresh_token.txt: %v", err)
 	}
@@ -83,10 +115,10 @@ func GetAccessTokenFromRefresh() string {
 	return newToken.AccessToken
 }
 
-func GetDriveService() *drive.Service {
+func (a *AuthManager) GetDriveService() *drive.Service {
 	ctx := context.Background()
 
-	refreshToken, err := os.ReadFile("config/refresh_token.txt")
+	refreshToken, err := a.fs.ReadFile("config/refresh_token.txt")
 	if err != nil {
 		log.Fatalf("Failed to read refresh_token.txt: %v", err)
 	}
@@ -107,3 +139,17 @@ func GetDriveService() *drive.Service {
 	}
 	return srv
 }
+
+// Global Wrappers for backward compatibility
+func GoogleConnect() {
+	NewDefaultAuthManager().GoogleConnect()
+}
+
+func GetAccessTokenFromRefresh() string {
+	return NewDefaultAuthManager().GetAccessTokenFromRefresh()
+}
+
+func GetDriveService() *drive.Service {
+	return NewDefaultAuthManager().GetDriveService()
+}
+

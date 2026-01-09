@@ -3,19 +3,19 @@ package drive
 import (
 	"context"
 	"fmt"
-	"github.com/vbauerster/mpb/v8"
-	drive "google.golang.org/api/drive/v3"
 	"log"
-	//"mime"
 	"net/http"
 	"path/filepath"
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/vbauerster/mpb/v8"
+	drive "google.golang.org/api/drive/v3"
 )
 
 var (
-	folderCreateMutex sync.Mutex
+	folderCreateMutex sync.Map
 	uploading         sync.Map
 	Debug             bool
 )
@@ -26,7 +26,19 @@ func debugLog(format string, v ...any) {
 	}
 }
 
-func CreateFolder(srv *drive.Service, folderName, parentID string) string {
+// DriveManager handles Google Drive operations
+type DriveManager struct {
+	srv *drive.Service
+}
+
+// NewDriveManager creates a new DriveManager
+func NewDriveManager(srv *drive.Service) *DriveManager {
+	return &DriveManager{
+		srv: srv,
+	}
+}
+
+func (d *DriveManager) CreateFolder(folderName, parentID string) string {
 	folderMetadata := &drive.File{
 		Name:     folderName,
 		MimeType: "application/vnd.google-apps.folder",
@@ -34,7 +46,7 @@ func CreateFolder(srv *drive.Service, folderName, parentID string) string {
 	if parentID != "" {
 		folderMetadata.Parents = []string{parentID}
 	}
-	folder, err := srv.Files.Create(folderMetadata).Do()
+	folder, err := d.srv.Files.Create(folderMetadata).Do()
 	if err != nil {
 		log.Fatalf("Failed to create folder: %v", err)
 	}
@@ -42,46 +54,58 @@ func CreateFolder(srv *drive.Service, folderName, parentID string) string {
 	return folder.Id
 }
 
-func FindOrCreateFolder(srv *drive.Service, folderName, parentID string) string {
+func (d *DriveManager) FindOrCreateFolder(folderName, parentID string) string {
+	// Simple fix for mutex to lock per parent+folder? Or just global for now as before?
+	// Previous code used sync.Mutex global 'folderCreateMutex'.
+	// I changed it to sync.Map in imports/var but logic below uses .Lock().
+	// Let's revert to sync.Mutex for simplicity as in original code.
+
 	query := fmt.Sprintf("name = '%s' and mimeType = 'application/vnd.google-apps.folder' and trashed = false and '%s' in parents",
 		strings.ReplaceAll(folderName, "'", "\\'"), parentID)
 
 	for retries := 0; retries < 3; retries++ {
-		resp, err := srv.Files.List().Q(query).Fields("files(id)").Do()
+		resp, err := d.srv.Files.List().Q(query).Fields("files(id)").Do()
 		if err == nil && len(resp.Files) > 0 {
 			return resp.Files[0].Id
 		}
 		time.Sleep(time.Second * time.Duration(retries+1))
 	}
 
-	folderCreateMutex.Lock()
-	defer folderCreateMutex.Unlock()
+	// Lock to prevent duplicate folder creation
+    // Using a named lock would be better but for now let's use a global lock or similar mechanism.
+    // Original code had `folderCreateMutex.Lock()`.
+    // I need to resolve the global mutex issue.
+	// Let's use the global one but I need to make sure I declared it correctly.
+    // Original: `folderCreateMutex sync.Mutex`
 
-	resp, err := srv.Files.List().Q(query).Fields("files(id)").Do()
+	globalFolderMutex.Lock()
+	defer globalFolderMutex.Unlock()
+
+	resp, err := d.srv.Files.List().Q(query).Fields("files(id)").Do()
 	if err == nil && len(resp.Files) > 0 {
 		return resp.Files[0].Id
 	}
-	return CreateFolder(srv, folderName, parentID)
+	return d.CreateFolder(folderName, parentID)
 }
 
-func SyncS3PathToDrive(srv *drive.Service, s3Key, rootDriveID string) string {
+func (d *DriveManager) SyncS3PathToDrive(s3Key, rootDriveID string) string {
 	parentID := rootDriveID
 	for _, folder := range strings.Split(filepath.Dir(s3Key), "/") {
 		if folder != "" {
-			parentID = FindOrCreateFolder(srv, folder, parentID)
+			parentID = d.FindOrCreateFolder(folder, parentID)
 		}
 	}
 	return parentID
 }
 
-func FileETagExistsInDrive(srv *drive.Service, s3ETag, parentID string) bool {
+func (d *DriveManager) FileETagExistsInDrive(s3ETag, parentID string) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	query := fmt.Sprintf(`'%s' in parents and trashed=false and appProperties has { key='s3etag' and value='%s' }`, parentID, s3ETag)
 	debugLog("ETag query: %s", query)
 
-	resp, err := srv.Files.List().Context(ctx).Q(query).Fields("files(id, name)").Do()
+	resp, err := d.srv.Files.List().Context(ctx).Q(query).Fields("files(id, name)").Do()
 	if err != nil {
 		debugLog("ETag check failed, skipping file: %v", err)
 		return true // Fail-safe: treat as exists to avoid duplicate uploads
@@ -95,14 +119,14 @@ func FileETagExistsInDrive(srv *drive.Service, s3ETag, parentID string) bool {
 	return false
 }
 
-func StreamUploadWithProgress(srv *drive.Service, fileURL, s3Key, rootDriveID, s3ETag string, bar *mpb.Bar) error {
+func (d *DriveManager) StreamUploadWithProgress(fileURL, s3Key, rootDriveID, s3ETag string, bar *mpb.Bar) error {
 	if _, exists := uploading.LoadOrStore(s3Key, true); exists {
 		bar.Abort(true)
 		return nil
 	}
 	defer uploading.Delete(s3Key)
 
-	parentFolderID := SyncS3PathToDrive(srv, s3Key, rootDriveID)
+	parentFolderID := d.SyncS3PathToDrive(s3Key, rootDriveID)
 
 	resp, err := http.Get(fileURL)
 	if err != nil {
@@ -129,7 +153,7 @@ func StreamUploadWithProgress(srv *drive.Service, fileURL, s3Key, rootDriveID, s
 	ctx, cancel := context.WithTimeout(context.Background(), 6*time.Hour)
 	defer cancel()
 
-	uploadedFile, err := srv.Files.Create(fileMetadata).Context(ctx).Media(progressReader).Do()
+	uploadedFile, err := d.srv.Files.Create(fileMetadata).Context(ctx).Media(progressReader).Do()
 	if err != nil {
 		bar.Abort(true)
 		return fmt.Errorf("Google Drive upload failed: %v", err)
@@ -151,3 +175,7 @@ func detectMimeType(fileName string) string {
 		return "application/octet-stream"
 	}
 }
+
+// Global mutex for folder creation to match original logic
+var globalFolderMutex sync.Mutex
+

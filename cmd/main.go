@@ -1,10 +1,10 @@
 package main
 
 import (
-	"S3SyncGoogleDrive/internal/GoogleSDK/drive"
-	"S3SyncGoogleDrive/internal/awsSDK/s3"
+	s3 "S3SyncGoogleDrive/internal/awsSDK/s3"
 	"S3SyncGoogleDrive/internal/configs"
-	"S3SyncGoogleDrive/internal/googlesdk"
+	googlesdk "S3SyncGoogleDrive/internal/googlesdk"
+	"S3SyncGoogleDrive/internal/googlesdk/drive"
 	progressReader "S3SyncGoogleDrive/internal/pkg/progressReader"
 	"flag"
 	"fmt"
@@ -23,9 +23,14 @@ func debugLog(format string, v ...any) {
 }
 
 func main() {
-	configs.Init()
-	s3.InitS3Client()
-	driveService := googlesdk.GetDriveService()
+	if err := configs.Init("config"); err != nil {
+		log.Fatalf("❌ Config initialization failed: %v", err)
+	}
+	// Initialize S3 Manager
+	s3Manager := s3.NewDefaultManager()
+
+	// Initialize Drive Manager
+	driveManager := drive.NewDriveManager(googlesdk.GetDriveService())
 
 	s3Prefix := flag.String("p", "", "Enter S3 prefix path (e.g.: test999)")
 	driveRootID := flag.String("droot", "root", "Google Drive root folder ID")
@@ -41,7 +46,7 @@ func main() {
 		prefix += "/"
 	}
 
-	s3Files, err := s3.ListS3Objects(configs.Config.S3.BucketName, prefix)
+	s3Files, err := s3Manager.ListS3Objects(configs.Config.S3.BucketName, prefix)
 	if err != nil {
 		log.Fatalf("❌ Failed to fetch S3 file list: %v", err)
 	}
@@ -63,23 +68,23 @@ func main() {
 			defer wg.Done()
 			defer func() { <-semaphore }()
 
-			presignedURL, err := s3.GetPresignedURL(configs.Config.S3.BucketName, s3Key)
+			presignedURL, err := s3Manager.GetPresignedURL(configs.Config.S3.BucketName, s3Key)
 			if err != nil {
 				debugLog("Failed to generate presigned URL %s: %v", s3Key, err)
 				return
 			}
 
-			parentID := drive.SyncS3PathToDrive(driveService, s3Key, *driveRootID)
+			parentID := driveManager.SyncS3PathToDrive(s3Key, *driveRootID)
 			debugLog("Drive folder ID: %s (S3Key: %s)", parentID, s3Key)
 
 			debugLog("Checking if ETag exists: %s", s3ETag)
-			if drive.FileETagExistsInDrive(driveService, s3ETag, parentID) {
+			if driveManager.FileETagExistsInDrive(s3ETag, parentID) {
 				debugLog("File already exists with the same ETag, skipping upload: %s", s3Key)
 				return
 			}
 
 			bar := pm.NewBar(size, fileName)
-			err = drive.StreamUploadWithProgress(driveService, presignedURL, s3Key, *driveRootID, s3ETag, bar)
+			err = driveManager.StreamUploadWithProgress(presignedURL, s3Key, *driveRootID, s3ETag, bar)
 			if err != nil {
 				log.Printf("Failed to upload %s: %v", s3Key, err)
 			}

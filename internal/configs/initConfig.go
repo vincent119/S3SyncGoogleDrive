@@ -1,8 +1,7 @@
 package configs
 
 import (
-	//"fmt"
-	"log"
+	"fmt"
 
 	"github.com/spf13/viper"
 )
@@ -29,20 +28,22 @@ type BaseConfig struct {
 
 var Config BaseConfig
 
-func Init() {
+func Init(configPath string) error {
+	viper.Reset()
 	viper.SetConfigName("base")
 	viper.SetConfigType("yaml")
-	viper.AddConfigPath("config")
+	viper.AddConfigPath(configPath)
 	viper.AutomaticEnv()
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("Failed to read base.yaml: %v", err)
+		return fmt.Errorf("failed to read base.yaml: %w", err)
 	}
 
 	if err := viper.Unmarshal(&Config); err != nil {
-		log.Fatalf("Failed to unmarshal config: %v", err)
+		return fmt.Errorf("failed to unmarshal config: %w", err)
 	}
 
+	return nil
 	// Print test
 	// fmt.Printf("AWS S3 Bucket: %s, Region: %s\n", Config.S3.BucketName, Config.S3.Region)
 	// fmt.Printf("Google Drive Client ID: %s\n", Config.Drive.ClientID)
