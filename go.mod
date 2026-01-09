@@ -1,4 +1,4 @@
-module github.com/vincent119/S3SyncGoogleDrive
+module github.com/vincent119/s3syncgoogledrive
 
 go 1.24.0
 

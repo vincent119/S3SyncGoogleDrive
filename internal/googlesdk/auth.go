@@ -6,7 +6,7 @@ import (
 	"log"
 	"os"
 
-	"github.com/vincent119/S3SyncGoogleDrive/internal/configs"
+	"github.com/vincent119/s3syncgoogledrive/internal/configs"
 
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"

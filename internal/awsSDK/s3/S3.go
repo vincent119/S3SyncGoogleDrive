@@ -5,8 +5,8 @@ import (
 	"log"
 	"time"
 
-	"github.com/vincent119/S3SyncGoogleDrive/internal/awsSDK"
-	"github.com/vincent119/S3SyncGoogleDrive/internal/configs"
+	"github.com/vincent119/s3syncgoogledrive/internal/awsSDK"
+	"github.com/vincent119/s3syncgoogledrive/internal/configs"
 
 	"github.com/aws/aws-sdk-go-v2/aws"
 	v4 "github.com/aws/aws-sdk-go-v2/aws/signer/v4"
