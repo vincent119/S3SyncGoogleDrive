@@ -1,11 +1,11 @@
 package main
 
 import (
-	s3 "S3SyncGoogleDrive/internal/awsSDK/s3"
-	"S3SyncGoogleDrive/internal/configs"
-	googlesdk "S3SyncGoogleDrive/internal/googlesdk"
-	"S3SyncGoogleDrive/internal/googlesdk/drive"
-	progressReader "S3SyncGoogleDrive/internal/pkg/progressReader"
+	s3 "github.com/vincent119/S3SyncGoogleDrive/internal/awsSDK/s3"
+	"github.com/vincent119/S3SyncGoogleDrive/internal/configs"
+	googlesdk "github.com/vincent119/S3SyncGoogleDrive/internal/googlesdk"
+	"github.com/vincent119/S3SyncGoogleDrive/internal/googlesdk/drive"
+	progressReader "github.com/vincent119/S3SyncGoogleDrive/internal/pkg/progressReader"
 	"flag"
 	"fmt"
 	"log"

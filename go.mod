@@ -1,4 +1,4 @@
-module S3SyncGoogleDrive
+module github.com/vincent119/S3SyncGoogleDrive
 
 go 1.24.0
 
@@ -6,7 +6,6 @@ require (
 	github.com/aws/aws-sdk-go-v2 v1.36.3
 	github.com/aws/aws-sdk-go-v2/config v1.29.11
 	github.com/aws/aws-sdk-go-v2/service/s3 v1.78.2
-	github.com/fatih/color v1.18.0
 	github.com/spf13/viper v1.20.0
 	github.com/vbauerster/mpb/v8 v8.8.0
 	golang.org/x/oauth2 v0.28.0
@@ -43,8 +42,6 @@ require (
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/googleapis/enterprise-certificate-proxy v0.3.6 // indirect
 	github.com/googleapis/gax-go/v2 v2.14.1 // indirect
-	github.com/mattn/go-colorable v0.1.13 // indirect
-	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
