@@ -5,7 +5,6 @@
 [![License](https://img.shields.io/github/license/vincent119/S3SyncGoogleDrive)](LICENSE)
 [![GitHub tag (latest SemVer)](https://img.shields.io/github/v/tag/vincent119/S3SyncGoogleDrive?sort=semver)](https://github.com/vincent119/S3SyncGoogleDrive/tags)
 [![codecov](https://codecov.io/gh/vincent119/S3SyncGoogleDrive/branch/master/graph/badge.svg)](https://codecov.io/gh/vincent119/S3SyncGoogleDrive)
-[![codebeat badge](https://codebeat.co/badges/PROJECT_ID_PLACEHOLDER)](https://codebeat.co/projects/github-com-vincent119-s3syncgoogledrive-master)
 
 一個用於將 Amazon S3 檔案同步到 Google Drive 的 Go 應用程式。此工具可以自動下載指定 S3 前綴路徑下的所有檔案，並上傳到 Google Drive 指定資料夾中。
 
